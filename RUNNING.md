@@ -104,7 +104,9 @@ defaults de dev (`EVENTS_SERVICE_CLIENT_ID=metrics-service`,
 `EVENTS_SERVICE_CLIENT_SECRET=dev-metrics-secret`) já funcionam.
 
 ### 4.4 — Criar eventos no avengers (senão a lista vem vazia)
-Criar evento exige token com scope `manager`. Usando o admin do 0x_t1:
+Criar evento exige token com scope `manager`. Usando o admin do 0x_t1, este
+snippet gera **5 eventos** de exemplo (datas **futuras**, para aparecerem como
+disponíveis):
 ```bash
 AUTH=http://localhost:8080 ; EVENTS=http://localhost:3000
 TOKEN=$(curl -s -X POST $AUTH/auth/login \
@@ -112,15 +114,22 @@ TOKEN=$(curl -s -X POST $AUTH/auth/login \
   -d "username=admin@local.dev&password=Admin@123" \
   | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 
-curl -s -X POST $EVENTS/events \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"title":"Congresso de IA","description":"Palestras e workshops.",
-       "starts_at":"2026-07-22T09:00:00-03:00","ends_at":"2026-07-24T18:00:00-03:00",
-       "timezone":"America/Sao_Paulo","registration_deadline":"2026-07-18T23:59:00-03:00",
-       "location":{"venue":"Centro de Convenções","city":"São Paulo, SP"},
-       "capacity":500,"category":"Acadêmico"}'
+EVENTS_JSON=(
+'{"title":"Congresso Brasileiro de Inteligência Artificial","description":"Três dias de palestras, workshops e networking sobre IA.","starts_at":"2026-07-22T09:00:00-03:00","ends_at":"2026-07-24T18:00:00-03:00","timezone":"America/Sao_Paulo","registration_deadline":"2026-07-18T23:59:00-03:00","location":{"venue":"Centro de Convenções Rebouças","city":"São Paulo, SP"},"capacity":500,"category":"Acadêmico"}'
+'{"title":"Meetup Dev Frontend — React & Design Systems","description":"Encontro da comunidade sobre componentização e acessibilidade.","starts_at":"2026-07-30T19:00:00-03:00","ends_at":"2026-07-30T22:00:00-03:00","timezone":"America/Sao_Paulo","registration_deadline":"2026-07-29T18:00:00-03:00","location":{"venue":"Hub de Inovação Batel","city":"Curitiba, PR"},"capacity":80,"category":"Social"}'
+'{"title":"Workshop de Liderança Corporativa 2026","description":"Programa intensivo para gestores: comunicação, feedback e gestão de times.","starts_at":"2026-08-05T08:30:00-03:00","ends_at":"2026-08-05T17:00:00-03:00","timezone":"America/Sao_Paulo","registration_deadline":"2026-08-01T23:59:00-03:00","location":{"venue":"Hotel Windsor Barra","city":"Rio de Janeiro, RJ"},"capacity":120,"category":"Corporativo"}'
+'{"title":"Feira de Carreiras em Engenharia","description":"Conecte-se com empresas, entrevistas rápidas e vagas de estágio.","starts_at":"2026-09-14T10:00:00-03:00","ends_at":"2026-09-15T18:00:00-03:00","timezone":"America/Sao_Paulo","registration_deadline":"2026-09-10T23:59:00-03:00","location":{"venue":"UFMG — Campus Pampulha","city":"Belo Horizonte, MG"},"capacity":1000,"category":"Acadêmico"}'
+'{"title":"Summit de Marketing Digital & Growth","description":"Estratégias de aquisição, retenção e análise de dados com líderes de mercado.","starts_at":"2026-08-19T09:00:00-03:00","ends_at":"2026-08-20T17:30:00-03:00","timezone":"America/Sao_Paulo","registration_deadline":"2026-08-15T23:59:00-03:00","location":{"venue":"WTC Events Center","city":"São Paulo, SP"},"capacity":350,"category":"Corporativo"}'
+)
+
+for ev in "${EVENTS_JSON[@]}"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST $EVENTS/events \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$ev")
+  echo "[$code] $(echo "$ev" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')"
+done
 ```
-Repita com outros eventos (datas **futuras** para aparecerem como disponíveis).
+Cada linha deve sair com `[201]`. Ajuste/duplique os payloads à vontade (mantenha
+`starts_at`/`ends_at` no futuro para o evento continuar disponível).
 
 ### 4.5 — T3 (este MFE)
 ```bash
