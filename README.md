@@ -56,13 +56,22 @@ directly — see `../eloo-shell/README.md` for the full pattern.
 Configured in `vite.config.ts`'s `federation({ exposes: {...} })`, consumed by
 the shell as `mfeRegistration/<Name>`:
 
-| Export              | Page                          | Notes                                    |
-| ------------------- | ----------------------------- | ---------------------------------------- |
-| `./EventsListPage`  | `src/pages/EventsListPage.tsx`| listagem de eventos disponíveis (pública)|
+| Export                   | Page                                | Notes                                         |
+| ------------------------ | ----------------------------------- | --------------------------------------------- |
+| `./EventsListPage`       | `src/pages/EventsListPage.tsx`      | listagem de eventos disponíveis (pública)     |
+| `./EventActivitiesPage`  | `src/pages/EventActivitiesPage.tsx` | atividades de um evento + inscrição (pública) |
 
 `EventsListPage` aceita `theme?: Theme`, `onOpenEvent?(eventId)` (o host decide
 a navegação ao clicar "Ver detalhes") e `embedded?: boolean` (quando `true`,
 omite o header próprio para não duplicar a casca do shell).
+
+`EventActivitiesPage` aceita `theme?: Theme`, `eventId?: string` (quando
+ausente, lê de `useParams()` na rota standalone `/events/:eventId/atividades`),
+`embedded?: boolean` e `onBack?()` (voltar à listagem — default `navigate(-1)`).
+Consome `GET /events/available` (cabeçalho do evento) e o novo
+`GET /events/{id}/activities` do T2, ambos públicos. O fluxo de inscrição
+(código de 8 chars num "e-mail simulado") e a lista de inscritos do gestor são
+simulados no cliente por enquanto.
 
 `react`, `react-dom`, `react-router-dom`, `@mui/material`, `@emotion/react` and
 `@emotion/styled` are declared as `shared` so this app and the shell run one
