@@ -5,9 +5,10 @@ flow, exposed to the [Eloo shell](../eloo-shell) via
 [Module Federation](https://github.com/originjs/vite-plugin-federation). It also
 runs standalone for local development.
 
-> **Status: scaffold.** Copied from `eloo-auth-mfe` as the starting skeleton.
-> Right now it only ships a placeholder **demo page** — no business logic and no
-> connection to the registration microservice (T2) yet.
+> **Status: em desenvolvimento.** Primeira tela real entregue — **Listagem de
+> Eventos disponíveis**, consumindo o microsserviço de registro (T2) via
+> `GET /events/available`. As demais telas (confirmação, minhas inscrições,
+> painel do organizador) ainda serão implementadas.
 
 ## Getting started
 
@@ -15,6 +16,16 @@ runs standalone for local development.
 npm install
 npm run dev             # standalone, http://localhost:5177
 ```
+
+> 📖 Para rodar o **stack completo** (quais repositórios clonar, portas a trocar,
+> ordem de subida dos serviços e como criar eventos), veja **[RUNNING.md](./RUNNING.md)**.
+
+A listagem lê `GET /events/available` através do proxy `/api` (configurado em
+`vite.config.ts` → `REGISTRATION_SERVICE_URL`, default `http://localhost:8000`).
+Esse endpoint é **público** (não exige login), então a tela renderiza sem token;
+para dados reais, o T2 (`manifestbolo-t2-registration`, `:8000`) e o
+events-service precisam estar no ar — sem eles a tela mostra o estado de erro
+com botão "Tentar novamente".
 
 To serve it as a remote for the shell to consume, build and preview the build
 (the dev server alone doesn't emit a `remoteEntry.js`):
@@ -29,9 +40,10 @@ npm run serve:remote    # vite build && vite preview --port 5176
 
 ```
 src/
-  pages/DemoPage.tsx   placeholder page, exposed as the federation remote
-  theme.ts             this app's own default MUI theme (used standalone)
-  App.tsx              standalone router — only used when run on its own
+  pages/EventsListPage.tsx      tela principal (listagem de eventos disponíveis)
+  services/registrationApi.ts   client HTTP do T2 (via proxy /api)
+  theme.ts                      tema MUI Eloo próprio (usado standalone)
+  App.tsx                       router standalone — só quando roda sozinho
 ```
 
 Follows the same remote contract as the other Eloo microfrontends: each exposed
@@ -44,9 +56,13 @@ directly — see `../eloo-shell/README.md` for the full pattern.
 Configured in `vite.config.ts`'s `federation({ exposes: {...} })`, consumed by
 the shell as `mfeRegistration/<Name>`:
 
-| Export        | Page                    | Notes                          |
-| ------------- | ----------------------- | ------------------------------ |
-| `./DemoPage`  | `src/pages/DemoPage.tsx`| placeholder to verify it boots |
+| Export              | Page                          | Notes                                    |
+| ------------------- | ----------------------------- | ---------------------------------------- |
+| `./EventsListPage`  | `src/pages/EventsListPage.tsx`| listagem de eventos disponíveis (pública)|
+
+`EventsListPage` aceita `theme?: Theme`, `onOpenEvent?(eventId)` (o host decide
+a navegação ao clicar "Ver detalhes") e `embedded?: boolean` (quando `true`,
+omite o header próprio para não duplicar a casca do shell).
 
 `react`, `react-dom`, `react-router-dom`, `@mui/material`, `@emotion/react` and
 `@emotion/styled` are declared as `shared` so this app and the shell run one
@@ -55,10 +71,11 @@ file's and the shell's `federation({ shared: [...] })` list.
 
 ## Next steps (planned)
 
-- `src/services/registrationApi.ts` — client for the T2 registration service
-  (`manifestbolo-t2-registration`, `:8000`), proxied via `/api`. Reuses the auth
-  token written to `localStorage` (`mfeAuth.accessToken`) by `eloo-auth-mfe`.
-- Real pages: available events + register, confirm registration (8-char code),
-  event registrations list (MANAGER/ADMIN), cancel.
+- Detalhe do evento + **inscrever-se** (`POST /events/{id}/guests`) — passa a
+  exigir login (Bearer token do `0x_t1`, reusando o `eloo-auth-mfe`).
+- **Confirmação** de inscrição com o código de 8 chars (`POST /events/confirmation/{id}`),
+  mockando em tela o "e-mail" recebido (o T2 devolve `confirmationToken` na criação).
+- **Minhas inscrições** (`GET /users/{id}/registrations` + `/activities`) e cancelar.
+- **Painel do organizador** (MANAGER/ADMIN) com inscritos por evento/atividade.
 - Wire the remote into `eloo-shell` (`remotes.ts`, `vite-env.d.ts`, routes).
 # manifestbolo-t3-mfe-registration
