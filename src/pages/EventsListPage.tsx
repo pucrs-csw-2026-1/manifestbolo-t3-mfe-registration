@@ -17,6 +17,8 @@ export interface EventsListPageProps {
   theme?: Theme;
   // Disparado ao clicar "Ver detalhes" num evento — o host decide a navegação.
   onOpenEvent?: (eventId: string) => void;
+  // Disparado ao clicar "Inscrições" no header standalone.
+  onOpenRegistrations?: () => void;
   // Quando montado dentro do shell, este já provê o header/nav global, então
   // o cabeçalho próprio da tela é omitido para não duplicar a "casca".
   embedded?: boolean;
@@ -319,6 +321,7 @@ function SkeletonCard() {
 export default function EventsListPage({
   theme,
   onOpenEvent,
+  onOpenRegistrations,
   embedded = false,
 }: EventsListPageProps) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -477,9 +480,23 @@ export default function EventsListPage({
                 >
                   Eventos
                 </span>
-                <span style={{ padding: "8px 14px", borderRadius: 8, color: C.muted, fontWeight: 500, fontSize: 14 }}>
+                <button
+                  type="button"
+                  onClick={onOpenRegistrations}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    color: C.muted,
+                    fontWeight: 500,
+                    fontSize: 14,
+                    border: "none",
+                    background: "transparent",
+                    cursor: onOpenRegistrations ? "pointer" : "default",
+                    fontFamily: "inherit",
+                  }}
+                >
                   Inscrições
-                </span>
+                </button>
               </nav>
             </div>
           </header>

@@ -6,6 +6,14 @@
 // inside the shell's page. Same pattern as eloo-auth-mfe's authApi.ts.
 const API_BASE = `${new URL(import.meta.url).origin}/api`;
 
+export interface AuthOptions {
+  accessToken?: string | null;
+}
+
+function authHeaders(accessToken?: string | null): HeadersInit | undefined {
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
+}
+
 // Mirrors AvailableEventResponse (camelCase via Pydantic alias) from
 // registration/schemas.py. Fields below `availableSlots` are the descriptive
 // data the T2 service forwards from the events-service for the listing UI.
@@ -50,6 +58,45 @@ export async function listAvailableEvents(): Promise<AvailableEvent[]> {
   return (await response.json()) as AvailableEvent[];
 }
 
+export interface UserRegistration {
+  registrationId?: string;
+  id?: string;
+  eventId: string;
+  activityId?: string | null;
+  status?: string | null;
+  createdAt?: string | null;
+  registeredAt?: string | null;
+  confirmedAt?: string | null;
+  eventName?: string | null;
+  eventTitle?: string | null;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  venue?: string | null;
+  city?: string | null;
+  event?: Partial<AvailableEvent> | null;
+}
+
+// GET /users/{user_id}/registrations — authenticated user registrations.
+// The T2 contract may include denormalized event fields; the page also tolerates
+// a compact response with only eventId/status.
+export async function listUserRegistrations(
+  userId: string,
+  options: AuthOptions = {},
+): Promise<UserRegistration[]> {
+  const response = await fetch(
+    `${API_BASE}/users/${encodeURIComponent(userId)}/registrations`,
+    { headers: authHeaders(options.accessToken) },
+  );
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+  return (await response.json()) as UserRegistration[];
+}
+
 // Mirrors o response camelCase (alias Pydantic) do novo endpoint público do T2
 // GET /events/{event_id}/activities — atividades de um evento do events-service
 // enriquecidas com a contagem local de inscritos do T2.
@@ -79,6 +126,7 @@ export async function listEventActivities(
   const response = await fetch(
     `${API_BASE}/events/${encodeURIComponent(eventId)}/activities`,
   );
+  console.log(response)
   if (!response.ok) {
     throw new Error(await readErrorMessage(response));
   }
