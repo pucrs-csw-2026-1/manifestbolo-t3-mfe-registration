@@ -129,8 +129,201 @@ for ev in "${EVENTS_JSON[@]}"; do
   echo "[$code] $(echo "$ev" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')"
 done
 ```
+No PowerShell, use esta versão (evita o alias `curl` e problemas de quoting):
+```powershell
+$AUTH = "http://localhost:8080"
+$EVENTS = "http://localhost:3000"
+
+$login = Invoke-RestMethod `
+  -Method Post `
+  -Uri "$AUTH/auth/login" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body "username=admin@local.dev&password=Admin@123"
+
+$headers = @{
+  Authorization = "Bearer $($login.access_token)"
+  "Content-Type" = "application/json; charset=utf-8"
+}
+
+$eventsJson = @(
+  @{
+    title = "Congresso Brasileiro de Inteligência Artificial"
+    description = "Três dias de palestras, workshops e networking sobre IA."
+    starts_at = "2026-07-22T12:00:00Z"
+    ends_at = "2026-07-24T21:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline = "2026-07-19T02:59:00Z"
+    location = @{ venue = "Centro de Convenções Rebouças"; city = "São Paulo, SP" }
+    capacity = 500
+    category = "Acadêmico"
+  }
+  @{
+    title = "Meetup Dev Frontend - React & Design Systems"
+    description = "Encontro da comunidade sobre componentização e acessibilidade."
+    starts_at = "2026-07-30T22:00:00Z"
+    ends_at = "2026-07-31T01:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline = "2026-07-29T21:00:00Z"
+    location = @{ venue = "Hub de Inovação Batel"; city = "Curitiba, PR" }
+    capacity = 80
+    category = "Social"
+  }
+  @{
+    title = "Workshop de Liderança Corporativa 2026"
+    description = "Programa intensivo para gestores: comunicação, feedback e gestão de times."
+    starts_at = "2026-08-05T11:30:00Z"
+    ends_at = "2026-08-05T20:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline = "2026-08-02T02:59:00Z"
+    location = @{ venue = "Hotel Windsor Barra"; city = "Rio de Janeiro, RJ" }
+    capacity = 120
+    category = "Corporativo"
+  }
+  @{
+    title = "Feira de Carreiras em Engenharia"
+    description = "Conecte-se com empresas, entrevistas rápidas e vagas de estágio."
+    starts_at = "2026-09-14T13:00:00Z"
+    ends_at = "2026-09-15T21:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline = "2026-09-11T02:59:00Z"
+    location = @{ venue = "UFMG - Campus Pampulha"; city = "Belo Horizonte, MG" }
+    capacity = 1000
+    category = "Acadêmico"
+  }
+  @{
+    title = "Summit de Marketing Digital & Growth"
+    description = "Estratégias de aquisição, retenção e análise de dados com líderes de mercado."
+    starts_at = "2026-08-19T12:00:00Z"
+    ends_at = "2026-08-20T20:30:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline = "2026-08-16T02:59:00Z"
+    location = @{ venue = "WTC Events Center"; city = "São Paulo, SP" }
+    capacity = 350
+    category = "Corporativo"
+  }
+)
+
+foreach ($ev in $eventsJson) {
+  $body = $ev | ConvertTo-Json -Depth 5
+  try {
+    $res = Invoke-WebRequest `
+      -Method Post `
+      -Uri "$EVENTS/events" `
+      -Headers $headers `
+      -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) `
+      -UseBasicParsing
+    "[$($res.StatusCode)] $($ev.title)"
+  } catch {
+    $statusCode = $_.Exception.Response.StatusCode.value__
+    "[$statusCode] $($ev.title)"
+  }
+}
+```
 Cada linha deve sair com `[201]`. Ajuste/duplique os payloads à vontade (mantenha
 `starts_at`/`ends_at` no futuro para o evento continuar disponível).
+
+### 4.4.1 — Criar atividades para um evento no avengers
+O avengers usa a rota com o nome legado `activitys`:
+`POST /events/{eventId}/activitys`. Troque `$EVENT_ID` pelo id de um evento já
+criado. No PowerShell:
+
+```powershell
+$AUTH = "http://localhost:8080"
+$EVENTS = "http://localhost:3000"
+$EVENT_ID = "f5935ee4-5241-4edd-a033-66a4f600f13a"
+
+$login = Invoke-RestMethod `
+  -Method Post `
+  -Uri "$AUTH/auth/login" `
+  -ContentType "application/x-www-form-urlencoded" `
+  -Body "username=admin@local.dev&password=Admin@123"
+
+$headers = @{
+  Authorization = "Bearer $($login.access_token)"
+  "Content-Type" = "application/json; charset=utf-8"
+}
+
+$activitiesJson = @(
+  @{
+    title_activity = "Palestra de abertura: IA aplicada"
+    description_activity = "Panorama de aplicações reais de IA em produtos digitais."
+    type = "palestra"
+    starts_at = "2026-07-22T13:00:00Z"
+    ends_at = "2026-07-22T14:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline_activity = "2026-07-21T23:59:00Z"
+    capacity_activity = 180
+    workload_minutes = 60
+    category_activity = "Acadêmico"
+    language_activity = "pt-BR"
+  }
+  @{
+    title_activity = "Workshop prático de React"
+    description_activity = "Construção guiada de uma interface com componentes reutilizáveis."
+    type = "workshop"
+    starts_at = "2026-07-22T15:00:00Z"
+    ends_at = "2026-07-22T17:00:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline_activity = "2026-07-21T23:59:00Z"
+    capacity_activity = 40
+    workload_minutes = 120
+    category_activity = "Frontend"
+    language_activity = "pt-BR"
+  }
+  @{
+    title_activity = "Mesa redonda: carreira em tecnologia"
+    description_activity = "Conversa com profissionais sobre mercado, portfólio e entrevistas."
+    type = "mesa_redonda"
+    starts_at = "2026-07-23T18:00:00Z"
+    ends_at = "2026-07-23T19:30:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline_activity = "2026-07-22T23:59:00Z"
+    capacity_activity = 120
+    workload_minutes = 90
+    category_activity = "Carreira"
+    language_activity = "pt-BR"
+  }
+  @{
+    title_activity = "Laboratório de APIs"
+    description_activity = "Hands-on sobre integração entre microsserviços, autenticação e contratos."
+    type = "workshop"
+    starts_at = "2026-07-24T12:30:00Z"
+    ends_at = "2026-07-24T14:30:00Z"
+    timezone = "America/Sao_Paulo"
+    registration_deadline_activity = "2026-07-23T23:59:00Z"
+    capacity_activity = 35
+    workload_minutes = 120
+    category_activity = "Backend"
+    language_activity = "pt-BR"
+  }
+)
+
+foreach ($activity in $activitiesJson) {
+  $body = $activity | ConvertTo-Json -Depth 5
+  try {
+    $res = Invoke-WebRequest `
+      -Method Post `
+      -Uri "$EVENTS/events/$EVENT_ID/activitys" `
+      -Headers $headers `
+      -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) `
+      -UseBasicParsing
+    "[$($res.StatusCode)] $($activity.title_activity)"
+  } catch {
+    $statusCode = $_.Exception.Response.StatusCode.value__
+    "[$statusCode] $($activity.title_activity)"
+  }
+}
+```
+
+Para conferir:
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "$EVENTS/events/$EVENT_ID/activitys" `
+  -Headers @{ Authorization = "Bearer $($login.access_token)" } |
+  ConvertTo-Json -Depth 5
+```
 
 ### 4.5 — T3 (este MFE)
 ```bash
