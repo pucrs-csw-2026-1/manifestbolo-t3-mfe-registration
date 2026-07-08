@@ -24,8 +24,8 @@ git clone git@github.com:pucrs-csw-2026-1/eloo-shell.git
 git clone git@github.com:pucrs-csw-2026-1/eloo-auth-mfe.git
 ```
 
-> ⚠️ O `manifestbolo-t2-registration` pode não estar no `main` — use a branch com
-> os endpoints do T3 (ex.: `MF-37-preparacao-para-o-t3-endpoints-list`).
+> ℹ️ Os endpoints do T3 (`GET /events/available` etc.) já estão na `develop` do
+> `manifestbolo-t2-registration` (merge do PR #38) — use a `develop`.
 
 ## 2. Pré-requisitos
 
@@ -43,8 +43,8 @@ ocupada por outro projeto (`ss -ltn` mostra o que está em uso).
 | 0x_t1 — ministack | **4566** | idem |
 | avengers — app | **3000** | `avengers-t2/.env` → `PORT` |
 | avengers — postgres | **5432** | `avengers-t2/.env` → `POSTGRES_PORT` **e** o host em `DATABASE_URL` |
-| T2 registration — app | **8000** | `manifestbolo-t2-registration/app/docker-compose.yml` (`ports` do serviço `app`) |
-| T2 registration — postgres | **5432** | idem (`ports` do serviço `db`) |
+| T2 registration — app | **8001** | `manifestbolo-t2-registration/app/docker-compose.yml` (`ports` do serviço `app`) |
+| T2 registration — postgres | **5434** | idem (`ports` do serviço `db`) |
 | T2 registration — ministack | **4567** | idem (já vem em 4567 p/ não bater com o do 0x_t1) |
 | T3 — MFE (Vite) | **5177** | `vite.config.ts` (`server.port`) |
 
@@ -62,12 +62,12 @@ ocupada por outro projeto (`ss -ltn` mostra o que está em uso).
 > (não use override em outro arquivo): o Compose *anexa* listas de `ports`, então
 > um override deixaria a porta antiga e a nova, causando conflito.
 
-### Exemplo real (máquina com :3000/:8000/:5432 ocupadas por outros projetos)
+### Exemplo real (máquina com :5432 ocupada por outro Postgres)
 
 | Serviço | Porta usada |
 | --- | --- |
-| avengers app / postgres | **3100** / **5433** |
-| T2 app / postgres | **8001** / **5434** |
+| avengers postgres | **5434** (`.env` → `POSTGRES_PORT` e `DATABASE_URL`) |
+| T2 postgres | **5435** (senão bate com o do avengers acima) |
 
 ## 4. Subir os serviços (nesta ordem)
 
@@ -95,7 +95,7 @@ npm run dev                   # servidor de eventos (:3000)
 ```bash
 cd manifestbolo-t2-registration/app
 cp .env.example .env          # já aponta EVENTS/AUTH p/ host.docker.internal; ajuste as portas
-docker compose up -d --build  # app (:8000) + postgres + ministack
+docker compose up -d --build  # app (:8001) + postgres + ministack
 ```
 `GET /events/available` é **público** e agrega os eventos do avengers. Como o
 avengers exige Bearer em **todas** as rotas, o T2 se autentica como **serviço**
@@ -106,7 +106,8 @@ defaults de dev (`EVENTS_SERVICE_CLIENT_ID=metrics-service`,
 ### 4.4 — Criar eventos no avengers (senão a lista vem vazia)
 Criar evento exige token com scope `manager`. Usando o admin do 0x_t1, este
 snippet gera **5 eventos** de exemplo (datas **futuras**, para aparecerem como
-disponíveis):
+disponíveis). Os timestamps estão em **UTC (`Z`)** — algumas cópias do events
+rejeitam offsets tipo `-03:00`, então mantenha esse formato:
 ```bash
 AUTH=http://localhost:8080 ; EVENTS=http://localhost:3000
 TOKEN=$(curl -s -X POST $AUTH/auth/login \
@@ -134,7 +135,7 @@ Cada linha deve sair com `[201]`. Ajuste/duplique os payloads à vontade (manten
 ### 4.5 — T3 (este MFE)
 ```bash
 cd manifestbolo-t3-mfe-registration
-echo "REGISTRATION_SERVICE_URL=http://localhost:8000" > .env   # ajuste a porta do T2
+echo "REGISTRATION_SERVICE_URL=http://localhost:8001" > .env   # ajuste a porta do T2
 npm install
 npm run dev                   # http://localhost:5177
 ```
@@ -142,7 +143,7 @@ npm run dev                   # http://localhost:5177
 ## 5. Verificar
 
 ```bash
-curl -s http://localhost:8000/events/available            # T2 direto (troque a porta)
+curl -s http://localhost:8001/events/available            # T2 direto (troque a porta)
 curl -s http://localhost:5177/api/events/available        # via proxy do T3 (o que a tela usa)
 ```
 Depois abra **http://localhost:5177** — a listagem aparece populada. Sem os

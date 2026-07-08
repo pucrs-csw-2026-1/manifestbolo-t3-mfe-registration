@@ -49,3 +49,38 @@ export async function listAvailableEvents(): Promise<AvailableEvent[]> {
   }
   return (await response.json()) as AvailableEvent[];
 }
+
+// Mirrors o response camelCase (alias Pydantic) do novo endpoint público do T2
+// GET /events/{event_id}/activities — atividades de um evento do events-service
+// enriquecidas com a contagem local de inscritos do T2.
+export interface EventActivity {
+  activityId: string;
+  title: string;
+  description: string | null;
+  type: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  registrationDeadline: string | null;
+  thumbnailUrl: string | null;
+  maxCapacity: number | null;
+  registeredCount: number;
+  availableSlots: number | null;
+  workloadMinutes: number;
+  category: string | null;
+  language: string | null;
+}
+
+// GET /events/{event_id}/activities — público (sem auth do usuário; o T2 se
+// autentica como serviço no events-service). 404 se o evento não existir.
+export async function listEventActivities(
+  eventId: string,
+): Promise<EventActivity[]> {
+  const response = await fetch(
+    `${API_BASE}/events/${encodeURIComponent(eventId)}/activities`,
+  );
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response));
+  }
+  return (await response.json()) as EventActivity[];
+}

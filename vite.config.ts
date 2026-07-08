@@ -25,6 +25,7 @@ export default defineConfig({
       filename: "remoteEntry.js",
       exposes: {
         "./EventsListPage": "./src/pages/EventsListPage.tsx",
+        "./EventActivitiesPage": "./src/pages/EventActivitiesPage.tsx",
       },
       shared: ["react", "react-dom", "react-router-dom", "@mui/material", "@emotion/react", "@emotion/styled"],
     }),
