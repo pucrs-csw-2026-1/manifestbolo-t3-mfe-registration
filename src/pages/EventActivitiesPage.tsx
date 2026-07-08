@@ -13,6 +13,13 @@ import { theme as defaultTheme } from "../theme";
 import {
   listAvailableEvents,
   listEventActivities,
+  getProfile,
+  registerEvent,
+  confirmEventRegistration,
+  registerActivity,
+  listUserEventRegistrations,
+  listUserActivities,
+  RegistrationError,
   type AvailableEvent,
   type EventActivity,
 } from "../services/registrationApi";
@@ -166,14 +173,6 @@ function timeRange(a: EventActivity): string {
     }
   };
   return `${fmt(a.startsAt)} – ${fmt(a.endsAt)}`;
-}
-
-// Código de confirmação simulado (8 chars, sem I/O/0/1 ambíguos), como no design.
-function genCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 8; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
 }
 
 // View-model de uma atividade (derivado do design: cores, barra, botão…).
@@ -334,7 +333,17 @@ function MetaItem({ icon, label, value }: { icon: string; label: string; value: 
   );
 }
 
-function EventHeaderCard({ ev }: { ev: AvailableEvent }) {
+function EventHeaderCard({
+  ev,
+  loggedIn,
+  registered,
+  onRegister,
+}: {
+  ev: AvailableEvent;
+  loggedIn: boolean;
+  registered: boolean;
+  onRegister: () => void;
+}) {
   const pct = Math.min(
     100,
     Math.round((ev.registeredCount / Math.max(1, ev.maxCapacity)) * 100),
@@ -442,6 +451,67 @@ function EventHeaderCard({ ev }: { ev: AvailableEvent }) {
                 Inscrições até {deadlineLabel(ev.registrationDeadline)}
               </div>
             )}
+            {/* CTA de inscrição no evento macro (real, autenticado). */}
+            <div style={{ marginTop: 14 }}>
+              {!loggedIn ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12.5,
+                    color: C.faint,
+                  }}
+                >
+                  <Msym name="lock" style={{ fontSize: 16 }} />
+                  Faça login para se inscrever
+                </div>
+              ) : registered ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: C.ok,
+                    background: "#e4f6ec",
+                    borderRadius: 8,
+                    padding: "9px 12px",
+                  }}
+                >
+                  <Msym name="check_circle" style={{ fontSize: 17 }} />
+                  Inscrito no evento
+                </div>
+              ) : (
+                <button
+                  onClick={onRegister}
+                  className="ea-btn"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    background: C.primary,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontFamily: spaceGrotesk,
+                    fontWeight: 600,
+                    fontSize: 13,
+                    letterSpacing: 0.4,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    boxShadow: "0 2px 5px rgba(184,51,106,.32)",
+                  }}
+                >
+                  Inscrever-se no evento
+                  <Msym name="arrow_forward" style={{ fontSize: 17 }} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         {(dates || ev.venue || ev.city) && (
@@ -468,10 +538,16 @@ function EventHeaderCard({ ev }: { ev: AvailableEvent }) {
 function ActivityCard({
   v,
   role,
+  loggedIn,
+  registeredInEvent,
+  alreadyRegistered,
   onOpen,
 }: {
   v: ActivityView;
   role: Role;
+  loggedIn: boolean;
+  registeredInEvent: boolean;
+  alreadyRegistered: boolean;
   onOpen: (v: ActivityView) => void;
 }) {
   const manager = role === "manager";
@@ -491,6 +567,13 @@ function ActivityCard({
     justifyContent: "center",
     gap: 6,
   };
+  const disabledGrey: CSSProperties = {
+    ...btnBase,
+    background: "#f1eef4",
+    color: C.faintest,
+    border: "1px solid #e4dfea",
+    cursor: "not-allowed",
+  };
   if (manager) {
     btnLabel = "Ver inscritos";
     btnIcon = "group";
@@ -502,17 +585,34 @@ function ActivityCard({
       border: "1.5px solid #d9a6bd",
       cursor: "pointer",
     };
+  } else if (alreadyRegistered) {
+    // Guest já inscrito nesta atividade.
+    btnLabel = "Inscrito";
+    btnIcon = "check_circle";
+    btnDisabled = true;
+    btnStyle = {
+      ...btnBase,
+      background: "#e4f6ec",
+      color: C.ok,
+      border: "1px solid #bfe6d1",
+      cursor: "default",
+    };
   } else if (v.soldOut) {
     btnLabel = "Esgotado";
     btnIcon = "block";
     btnDisabled = true;
-    btnStyle = {
-      ...btnBase,
-      background: "#f1eef4",
-      color: C.faintest,
-      border: "1px solid #e4dfea",
-      cursor: "not-allowed",
-    };
+    btnStyle = disabledGrey;
+  } else if (!loggedIn) {
+    btnLabel = "Faça login";
+    btnIcon = "lock";
+    btnDisabled = true;
+    btnStyle = disabledGrey;
+  } else if (!registeredInEvent) {
+    // Regra macro→atividade: precisa estar inscrito no evento antes.
+    btnLabel = "Inscreva-se no evento";
+    btnIcon = "lock";
+    btnDisabled = true;
+    btnStyle = disabledGrey;
   } else {
     btnLabel = "Inscrever-se";
     btnIcon = "arrow_forward";
@@ -741,20 +841,23 @@ function PrimaryButton({
   onClick,
   children,
   marginTop,
+  disabled = false,
 }: {
   onClick: () => void;
   children: ReactNode;
   marginTop?: number;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className="ea-btn"
+      disabled={disabled}
+      className={disabled ? undefined : "ea-btn"}
       style={{
         width: "100%",
         marginTop,
         padding: 14,
-        background: C.primary,
+        background: disabled ? "#d7a6bd" : C.primary,
         color: "#fff",
         border: "none",
         borderRadius: 8,
@@ -762,7 +865,7 @@ function PrimaryButton({
         fontWeight: 600,
         fontSize: 14,
         letterSpacing: 0.5,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -781,6 +884,9 @@ type FetchState = "loading" | "ready" | "error";
 type Filter = "all" | "vaga" | "sold";
 type Screen = "list" | "inscricao" | "inscritos";
 type Step = "form" | "code" | "done";
+// Qual inscrição a tela "inscricao" está conduzindo: no evento macro (com código
+// de confirmação real do T2) ou numa atividade (1 clique, sem código).
+type RegKind = "event" | "activity";
 
 export default function EventActivitiesPage({
   theme,
@@ -808,6 +914,35 @@ export default function EventActivitiesPage({
   const [typed, setTyped] = useState("");
   const [codeError, setCodeError] = useState(false);
 
+  // Usuário logado real (mfe-auth via localStorage, mesma origin no shell).
+  // Estável durante a vida do componente; navegar entre eventos remonta a tela.
+  const profile = useMemo(() => getProfile(), []);
+  const loggedIn = profile !== null;
+  // Só MANAGER/ADMIN podem gerir (ver inscritos). Mesma convenção do eloo-shell
+  // (Header.tsx). Espelha a autorização do T2, que responde 403 a participante
+  // nos endpoints de listagem de inscritos.
+  const canManage =
+    profile?.accessLevel === "MANAGER" || profile?.accessLevel === "ADMIN";
+  const userName = profile
+    ? `${profile.firstName} ${profile.lastName}`.trim()
+    : "";
+  const userEmail = profile?.email ?? "";
+  const userInitials = profile
+    ? (
+        (profile.firstName[0] ?? "") + (profile.lastName[0] ?? "")
+      ).toUpperCase() || "?"
+    : "?";
+
+  // Fluxo de inscrição real.
+  const [regKind, setRegKind] = useState<RegKind>("activity");
+  const [confirmationId, setConfirmationId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isRegisteredInEvent, setIsRegisteredInEvent] = useState(false);
+  const [registeredActivityIds, setRegisteredActivityIds] = useState<
+    Set<string>
+  >(new Set());
+
   useEffect(() => {
     let alive = true;
     if (!eventId) {
@@ -818,7 +953,7 @@ export default function EventActivitiesPage({
     setState("loading");
     setError(null);
     Promise.all([listAvailableEvents(), listEventActivities(eventId)])
-      .then(([events, acts]) => {
+      .then(async ([events, acts]) => {
         if (!alive) return;
         const ev = events.find((e) => e.eventId === eventId);
         if (!ev) {
@@ -828,6 +963,33 @@ export default function EventActivitiesPage({
         }
         setEvent(ev);
         setActivities(acts);
+        // Inscrições do usuário logado — dão o gating (evento macro → atividade)
+        // e a marcação "Inscrito ✓". Tolerante: falha aqui não bloqueia a tela.
+        if (profile) {
+          try {
+            const [evRegs, actRegs] = await Promise.all([
+              listUserEventRegistrations(profile.id),
+              listUserActivities(profile.id),
+            ]);
+            if (!alive) return;
+            setIsRegisteredInEvent(
+              evRegs.some(
+                (r) => r.eventId === eventId && r.status !== "CANCELLED",
+              ),
+            );
+            setRegisteredActivityIds(
+              new Set(
+                actRegs
+                  .filter((r) => r.eventId === eventId)
+                  .map((r) => r.activityId),
+              ),
+            );
+          } catch {
+            if (!alive) return;
+            setIsRegisteredInEvent(false);
+            setRegisteredActivityIds(new Set());
+          }
+        }
         setState("ready");
       })
       .catch((err: unknown) => {
@@ -838,7 +1000,7 @@ export default function EventActivitiesPage({
     return () => {
       alive = false;
     };
-  }, [eventId, reloadKey]);
+  }, [eventId, reloadKey, profile]);
 
   const views = useMemo(
     () => activities.map((a) => toView(a, event?.startsAt ?? null)),
@@ -856,36 +1018,119 @@ export default function EventActivitiesPage({
 
   const selected = views.find((v) => v.a.activityId === selectedId) ?? null;
 
-  const backToList = () => setScreen("list");
+  // Voltar à listagem e refetch — reflete contagens/estados atualizados no banco.
+  const backToList = () => {
+    setScreen("list");
+    setReloadKey((k) => k + 1);
+  };
   const changeRole = (r: Role) => {
     setRole(r);
     setScreen("list");
   };
-  const openActivity = (v: ActivityView) => {
-    if (role === "manager") {
-      setSelectedId(v.a.activityId);
-      setScreen("inscritos");
-    } else if (!v.soldOut) {
-      setSelectedId(v.a.activityId);
-      setScreen("inscricao");
-      setStep("form");
-      setCode(null);
-      setTyped("");
-      setCodeError(false);
-    }
-  };
-  // Simulação (como no design): o código é gerado no cliente e mostrado num
-  // "e-mail simulado"; nome/e-mail fixos. A integração real (auth + POST de
-  // inscrição/confirmação no T2) virá depois.
-  const confirmRegistration = () => {
-    setStep("code");
-    setCode(genCode());
+  // Prepara a tela "inscricao" (limpa o estado do fluxo anterior).
+  const startRegistration = (kind: RegKind, activityId: string | null) => {
+    setRegKind(kind);
+    setSelectedId(activityId);
+    setScreen("inscricao");
+    setStep("form");
+    setCode(null);
     setTyped("");
     setCodeError(false);
+    setSubmitError(null);
+    setConfirmationId(null);
   };
-  const submitCode = () => {
-    if (typed.trim().toUpperCase() === code) setStep("done");
-    else setCodeError(true);
+  const openEventRegistration = () => {
+    if (!loggedIn || isRegisteredInEvent) return;
+    startRegistration("event", null);
+  };
+  const openActivity = (v: ActivityView) => {
+    if (role === "manager" && canManage) {
+      setSelectedId(v.a.activityId);
+      setScreen("inscritos");
+      return;
+    }
+    // Gating: só inscreve em atividade se logado, inscrito no evento macro, com
+    // vaga e ainda não inscrito nesta atividade.
+    if (
+      !loggedIn ||
+      !isRegisteredInEvent ||
+      v.soldOut ||
+      registeredActivityIds.has(v.a.activityId)
+    ) {
+      return;
+    }
+    startRegistration("activity", v.a.activityId);
+  };
+
+  // Passo "form" → seguinte. Evento: POST guests (devolve o código real) → passo
+  // "code". Atividade: POST activities/registrations (sem código) → "done".
+  const confirmRegistration = async () => {
+    if (!profile || !eventId) return;
+    setBusy(true);
+    setSubmitError(null);
+    try {
+      if (regKind === "event") {
+        const reg = await registerEvent(eventId, profile.id);
+        setIsRegisteredInEvent(true);
+        if (reg.status === "CONFIRMED" || !reg.confirmationId) {
+          setStep("done");
+        } else {
+          setConfirmationId(reg.confirmationId);
+          setCode(reg.confirmationToken);
+          setTyped("");
+          setCodeError(false);
+          setStep("code");
+        }
+      } else if (selected) {
+        await registerActivity(selected.a.activityId, profile.id, eventId);
+        setRegisteredActivityIds((prev) =>
+          new Set(prev).add(selected.a.activityId),
+        );
+        setStep("done");
+      }
+    } catch (err) {
+      // 409 = já inscrito: trata como sucesso idempotente.
+      if (err instanceof RegistrationError && err.status === 409) {
+        if (regKind === "event") {
+          setIsRegisteredInEvent(true);
+        } else if (selected) {
+          setRegisteredActivityIds((prev) =>
+            new Set(prev).add(selected.a.activityId),
+          );
+        }
+        setStep("done");
+      } else {
+        setSubmitError(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível concluir a inscrição.",
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Passo "code" (só evento): confirma o token real no T2 (case-sensitive).
+  const submitCode = async () => {
+    if (!confirmationId) return;
+    setBusy(true);
+    setCodeError(false);
+    try {
+      await confirmEventRegistration(confirmationId, typed.trim());
+      setIsRegisteredInEvent(true);
+      setStep("done");
+    } catch (err) {
+      // 409 = já confirmado: também é sucesso.
+      if (err instanceof RegistrationError && err.status === 409) {
+        setIsRegisteredInEvent(true);
+        setStep("done");
+      } else {
+        setCodeError(true);
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const chipStyle = (active: boolean): CSSProperties => ({
@@ -974,7 +1219,9 @@ export default function EventActivitiesPage({
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <RoleToggle role={role} onChange={changeRole} variant="bar" />
+                {canManage && (
+                  <RoleToggle role={role} onChange={changeRole} variant="bar" />
+                )}
                 <div
                   style={{
                     width: 34,
@@ -989,7 +1236,7 @@ export default function EventActivitiesPage({
                     color: "#3a1830",
                   }}
                 >
-                  MR
+                  {userInitials}
                 </div>
               </div>
             </div>
@@ -1059,10 +1306,17 @@ export default function EventActivitiesPage({
                   <Msym name="chevron_right" style={{ fontSize: 16 }} />
                   <span style={{ color: C.soft, fontWeight: 600 }}>{event.name}</span>
                 </div>
-                {embedded && <RoleToggle role={role} onChange={changeRole} variant="light" />}
+                {embedded && canManage && (
+                  <RoleToggle role={role} onChange={changeRole} variant="light" />
+                )}
               </div>
 
-              <EventHeaderCard ev={event} />
+              <EventHeaderCard
+                ev={event}
+                loggedIn={loggedIn}
+                registered={isRegisteredInEvent}
+                onRegister={openEventRegistration}
+              />
 
               {/* seção de atividades */}
               <div
@@ -1096,7 +1350,15 @@ export default function EventActivitiesPage({
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {visible.map((v) => (
-                  <ActivityCard key={v.a.activityId} v={v} role={role} onOpen={openActivity} />
+                  <ActivityCard
+                    key={v.a.activityId}
+                    v={v}
+                    role={canManage ? role : "guest"}
+                    loggedIn={loggedIn}
+                    registeredInEvent={isRegisteredInEvent}
+                    alreadyRegistered={registeredActivityIds.has(v.a.activityId)}
+                    onOpen={openActivity}
+                  />
                 ))}
               </div>
 
@@ -1111,7 +1373,8 @@ export default function EventActivitiesPage({
             </div>
           )}
 
-          {state === "ready" && event && screen === "inscricao" && selected && (
+          {state === "ready" && event && screen === "inscricao" &&
+            (regKind === "event" || selected) && (
             <div style={{ maxWidth: 560, margin: "0 auto" }}>
               <BackToListButton onClick={backToList} />
 
@@ -1131,12 +1394,14 @@ export default function EventActivitiesPage({
                   }}
                 >
                   <div style={{ ...labelStyle, color: undefined, opacity: 0.85, marginBottom: 6 }}>
-                    Inscrição em atividade
+                    {regKind === "event" ? "Inscrição no evento" : "Inscrição em atividade"}
                   </div>
                   <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>
-                    {selected.a.title}
+                    {regKind === "event" ? event.name : selected?.a.title}
                   </h2>
-                  <div style={{ fontSize: 13, opacity: 0.9 }}>{event.name}</div>
+                  {regKind === "activity" && (
+                    <div style={{ fontSize: 13, opacity: 0.9 }}>{event.name}</div>
+                  )}
                 </div>
 
                 <div style={{ padding: "24px 26px" }}>
@@ -1152,18 +1417,24 @@ export default function EventActivitiesPage({
                       color: C.soft,
                     }}
                   >
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <Msym name="schedule" style={{ fontSize: 18, color: "#c490d1" }} />
-                      {selected.time}
-                      {selected.day ? ` · ${selected.day}` : ""}
-                    </span>
+                    {regKind === "event" ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Msym name="calendar_month" style={{ fontSize: 18, color: "#c490d1" }} />
+                        {eventDatesLine(event) ?? "Datas a confirmar"}
+                      </span>
+                    ) : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Msym name="schedule" style={{ fontSize: 18, color: "#c490d1" }} />
+                        {selected?.time}
+                        {selected?.day ? ` · ${selected.day}` : ""}
+                      </span>
+                    )}
                   </div>
 
                   {step === "form" && (
                     <div>
                       <div style={{ ...labelStyle, marginBottom: 14 }}>Confirme seus dados</div>
-                      {/* Dados fixos como no design — virão do auth (T1) na
-                          integração real. */}
+                      {/* Dados do usuário logado (mfe-auth). */}
                       <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: C.muted, marginBottom: 5 }}>
                         Nome completo
                       </label>
@@ -1179,7 +1450,7 @@ export default function EventActivitiesPage({
                           marginBottom: 16,
                         }}
                       >
-                        Marina Ribeiro
+                        {userName || "—"}
                       </div>
                       <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: C.muted, marginBottom: 5 }}>
                         E-mail
@@ -1196,12 +1467,47 @@ export default function EventActivitiesPage({
                           marginBottom: 22,
                         }}
                       >
-                        marina.ribeiro@email.com
+                        {userEmail || "—"}
                       </div>
-                      <PrimaryButton onClick={confirmRegistration}>
-                        Confirmar inscrição
-                        <Msym name="arrow_forward" style={{ fontSize: 18 }} />
-                      </PrimaryButton>
+                      {submitError && (
+                        <div
+                          style={{
+                            fontSize: 12.5,
+                            color: C.danger,
+                            marginBottom: 14,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <Msym name="error" style={{ fontSize: 15 }} />
+                          {submitError}
+                        </div>
+                      )}
+                      {loggedIn ? (
+                        <PrimaryButton onClick={confirmRegistration} disabled={busy}>
+                          {busy ? "Enviando…" : "Confirmar inscrição"}
+                          {!busy && <Msym name="arrow_forward" style={{ fontSize: 18 }} />}
+                        </PrimaryButton>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                            fontSize: 13.5,
+                            color: C.muted,
+                            background: "#faf8fc",
+                            border: "1px solid #ddd6e4",
+                            borderRadius: 8,
+                            padding: "14px",
+                          }}
+                        >
+                          <Msym name="lock" style={{ fontSize: 17 }} />
+                          Faça login para se inscrever
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1254,14 +1560,16 @@ export default function EventActivitiesPage({
                       <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: C.muted, marginBottom: 5 }}>
                         Código de confirmação
                       </label>
+                      {/* O token do T2 é case-sensitive (letras maiúsculas e
+                          minúsculas + dígitos): não normalizar a caixa. */}
                       <input
                         value={typed}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                          setTyped(e.target.value.toUpperCase());
+                          setTyped(e.target.value);
                           setCodeError(false);
                         }}
                         maxLength={8}
-                        placeholder="XXXXXXXX"
+                        placeholder="8 caracteres"
                         style={{
                           width: "100%",
                           padding: "13px 14px",
@@ -1270,7 +1578,6 @@ export default function EventActivitiesPage({
                           fontFamily: spaceGrotesk,
                           fontSize: 18,
                           letterSpacing: 4,
-                          textTransform: "uppercase",
                           textAlign: "center",
                           color: C.ink,
                           marginBottom: 8,
@@ -1292,8 +1599,12 @@ export default function EventActivitiesPage({
                           Código incorreto. Confira o e-mail e tente novamente.
                         </div>
                       )}
-                      <PrimaryButton onClick={submitCode} marginTop={12}>
-                        Confirmar código
+                      <PrimaryButton
+                        onClick={submitCode}
+                        marginTop={12}
+                        disabled={busy || typed.trim().length !== 8}
+                      >
+                        {busy ? "Confirmando…" : "Confirmar código"}
                       </PrimaryButton>
                     </div>
                   )}
@@ -1318,8 +1629,17 @@ export default function EventActivitiesPage({
                         Inscrição confirmada!
                       </h3>
                       <p style={{ margin: "0 0 22px", fontSize: 14, color: C.muted, lineHeight: 1.55 }}>
-                        Sua vaga em <strong>{selected.a.title}</strong> está garantida. Você
-                        receberá os detalhes por e-mail.
+                        {regKind === "event" ? (
+                          <>
+                            Sua inscrição em <strong>{event.name}</strong> está confirmada.
+                            Agora você já pode se inscrever nas atividades do evento.
+                          </>
+                        ) : (
+                          <>
+                            Sua vaga em <strong>{selected?.a.title}</strong> está garantida. Você
+                            receberá os detalhes por e-mail.
+                          </>
+                        )}
                       </p>
                       <button
                         onClick={backToList}

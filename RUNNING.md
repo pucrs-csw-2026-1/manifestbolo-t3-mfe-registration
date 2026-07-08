@@ -132,7 +132,40 @@ done
 Cada linha deve sair com `[201]`. Ajuste/duplique os payloads à vontade (mantenha
 `starts_at`/`ends_at` no futuro para o evento continuar disponível).
 
-### 4.5 — T3 (este MFE)
+### 4.5 — Criar atividades nos eventos (2 por evento)
+Cada evento da listagem abre a tela de **Atividades** (`GET /events/{id}/activities`,
+pública). Este snippet cria **2 atividades por evento** — uma `palestra` (vagas
+amplas) e um `workshop` (vagas reduzidas) — com horários derivados do início de
+cada evento. Criar atividade exige token com scope `manager` (o admin serve) e
+vai direto no events-service (`avengers`, rota `POST /events/{id}/activitys` — sim,
+com esse "s"). Requer `jq`. **Não é idempotente** — rodar de novo duplica.
+```bash
+AUTH=http://localhost:8080 ; EVENTS=http://localhost:3100 ; REG=http://localhost:8001
+TOKEN=$(curl -s -X POST $AUTH/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin@local.dev&password=Admin@123" | jq -r .access_token)
+
+curl -s $REG/events/available | jq -c '.[]' | while read -r ev; do
+  ID=$(jq -r '.eventId' <<<"$ev"); NAME=$(jq -r '.name' <<<"$ev")
+  START=$(jq -r '.startsAt' <<<"$ev")
+  A1S=$(date -u -d "$START" +%Y-%m-%dT%H:%M:%SZ)
+  A1E=$(date -u -d "$START +90 minutes" +%Y-%m-%dT%H:%M:%SZ)
+  A2S=$(date -u -d "$START +2 hours" +%Y-%m-%dT%H:%M:%SZ)
+  A2E=$(date -u -d "$START +4 hours" +%Y-%m-%dT%H:%M:%SZ)
+  curl -s -o /dev/null -w "[%{http_code}] $NAME → Palestra de abertura\n" \
+    -X POST $EVENTS/events/$ID/activitys -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg s "$A1S" --arg e "$A1E" '{title_activity:"Palestra de abertura",description_activity:"Sessão inaugural com a visão geral do evento.",type:"palestra",starts_at:$s,ends_at:$e,timezone:"America/Sao_Paulo",capacity_activity:120,workload_minutes:90,category_activity:"Palestra",language_activity:"pt-BR"}')"
+  curl -s -o /dev/null -w "[%{http_code}] $NAME → Workshop prático\n" \
+    -X POST $EVENTS/events/$ID/activitys -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg s "$A2S" --arg e "$A2E" '{title_activity:"Workshop prático",description_activity:"Atividade hands-on com número reduzido de vagas.",type:"workshop",starts_at:$s,ends_at:$e,timezone:"America/Sao_Paulo",capacity_activity:30,workload_minutes:120,category_activity:"Workshop",language_activity:"pt-BR"}')"
+done
+```
+Cada linha deve sair com `[201]`. Confira uma:
+`curl -s $REG/events/<id>/activities | jq length` → `2`.
+
+### 4.6 — T3 (este MFE)
 ```bash
 cd manifestbolo-t3-mfe-registration
 echo "REGISTRATION_SERVICE_URL=http://localhost:8001" > .env   # ajuste a porta do T2
