@@ -26,6 +26,7 @@ export default defineConfig({
       exposes: {
         "./EventsListPage": "./src/pages/EventsListPage.tsx",
         "./EventActivitiesPage": "./src/pages/EventActivitiesPage.tsx",
+        "./MyRegistrationsPage": "./src/pages/MyRegistrationsPage.tsx",
       },
       shared: ["react", "react-dom", "react-router-dom", "@mui/material", "@emotion/react", "@emotion/styled"],
     }),
